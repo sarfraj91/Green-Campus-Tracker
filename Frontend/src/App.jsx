@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import Navbar from "./components/users/common/Navbar.jsx";
 import Footer from "./components/users/common/Footer.jsx";
@@ -12,6 +12,8 @@ import DonateTrees from "./components/pages/DonateTrees.jsx";
 import Dashboard from "./components/pages/Dashboard.jsx";
 import OrderTracking from "./components/pages/OrderTracking.jsx";
 import Certificate from "./components/pages/Certificate.jsx";
+import LandingPage from "./components/users/landingPage/LandingPage.jsx";
+import ImpactPage from "./components/users/landingPage/ImpactPage.jsx";
 
 const AUTH_STORAGE_KEY = "gogreen_user";
 
@@ -24,20 +26,11 @@ const loadStoredUser = () => {
   }
 };
 
-const Impact = () => (
-  <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4 py-12">
-    <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-xl">
-      <h1 className="text-3xl font-bold text-emerald-600 mb-3">Impact</h1>
-      <p className="text-gray-700">
-        Track your plantation and carbon-offset impact here.
-      </p>
-    </div>
-  </div>
-);
-
 function App() {
   const [user, setUser] = useState(loadStoredUser);
+  const location = useLocation();
   const isAuthenticated = Boolean(user);
+  const isCertificateRoute = location.pathname.startsWith("/certificate/");
 
   const persistUser = (userData) => {
     setUser(userData);
@@ -59,18 +52,23 @@ function App() {
 
   return (
     <>
-      <Navbar
-        isAuthenticated={isAuthenticated}
-        user={user}
-        onLogout={handleLogout}
-      />
+      {!isCertificateRoute && (
+        <Navbar
+          isAuthenticated={isAuthenticated}
+          user={user}
+          onLogout={handleLogout}
+        />
+      )}
 
       <Routes>
         <Route
           path="/"
-          element={<Navigate to={isAuthenticated ? "/dashboard" : "/signup"} replace />}
+          element={<LandingPage isAuthenticated={isAuthenticated} />}
         />
-        <Route path="/impact" element={<Impact />} />
+        <Route
+          path="/impact"
+          element={<ImpactPage isAuthenticated={isAuthenticated} />}
+        />
         <Route path="/signup" element={<Register />} />
         <Route path="/login" element={<Login onLogin={handleLogin} />} />
         <Route path="/verify-otp" element={<VerifyOTP onLogin={handleLogin} />} />
@@ -109,7 +107,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      <Footer />
+      {!isCertificateRoute && <Footer />}
     </>
   );
 }

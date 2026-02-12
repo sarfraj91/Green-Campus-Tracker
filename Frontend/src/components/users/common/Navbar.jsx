@@ -13,7 +13,7 @@ const Navbar = ({ isAuthenticated, user, onLogout }) => {
   };
 
   return (
-    <nav className="w-full bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">
+    <nav className="w-full bg-white/95 backdrop-blur-lg shadow-sm border-b border-gray-100 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         
         {/* Logo */}
@@ -28,14 +28,14 @@ const Navbar = ({ isAuthenticated, user, onLogout }) => {
         </Link>
 
         {/* Center Navigation */}
-        <div className="hidden md:flex items-center gap-6 bg-gray-50 px-6 py-2 rounded-full shadow-inner">
+        <div className="nav-shell hidden md:flex items-center gap-6 bg-gray-50 px-6 py-2 rounded-full shadow-inner">
           
           <NavLink
             to="/"
             className={({ isActive }) =>
-              `flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition ${
+              `nav-item flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition ${
                 isActive
-                  ? "bg-emerald-100 text-emerald-700"
+                  ? "nav-item-active bg-emerald-100 text-emerald-700"
                   : "text-gray-600 hover:text-emerald-600"
               }`
             }
@@ -47,9 +47,9 @@ const Navbar = ({ isAuthenticated, user, onLogout }) => {
           <NavLink
             to="/impact"
             className={({ isActive }) =>
-              `flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition ${
+              `nav-item flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition ${
                 isActive
-                  ? "bg-emerald-100 text-emerald-700"
+                  ? "nav-item-active bg-emerald-100 text-emerald-700"
                   : "text-gray-600 hover:text-emerald-600"
               }`
             }
@@ -62,9 +62,9 @@ const Navbar = ({ isAuthenticated, user, onLogout }) => {
             <NavLink
               to="/donate-trees"
               className={({ isActive }) =>
-                `flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition ${
+                `nav-item flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition ${
                   isActive
-                    ? "bg-emerald-100 text-emerald-700"
+                    ? "nav-item-active bg-emerald-100 text-emerald-700"
                     : "text-gray-600 hover:text-emerald-600"
                 }`
               }
@@ -78,9 +78,9 @@ const Navbar = ({ isAuthenticated, user, onLogout }) => {
             <NavLink
               to="/dashboard"
               className={({ isActive }) =>
-                `flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition ${
+                `nav-item flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition ${
                   isActive
-                    ? "bg-emerald-100 text-emerald-700"
+                    ? "nav-item-active bg-emerald-100 text-emerald-700"
                     : "text-gray-600 hover:text-emerald-600"
                 }`
               }
@@ -104,7 +104,7 @@ const Navbar = ({ isAuthenticated, user, onLogout }) => {
 
               <Link
                 to="/signup"
-                className="bg-emerald-600 text-white px-5 py-2 rounded-lg font-medium shadow-md hover:bg-emerald-700 transition"
+                className="btn-sheen bg-emerald-600 text-white px-5 py-2 rounded-lg font-medium shadow-md hover:bg-emerald-700 transition"
               >
                 Get Started
               </Link>

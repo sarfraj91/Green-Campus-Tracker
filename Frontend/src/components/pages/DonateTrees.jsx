@@ -62,6 +62,13 @@ export default function DonateTrees({ user }) {
     return trees * Number(config.tree_price_inr || 0);
   }, [formData.number_of_trees, config.tree_price_inr]);
 
+  const selectedLocationMapUrl =
+    formData.latitude && formData.longitude
+      ? `https://www.mapbox.com/search?query=${encodeURIComponent(
+          `${formData.latitude},${formData.longitude}`,
+        )}`
+      : "";
+
   useEffect(() => {
     setFormData((prev) => ({
       ...prev,
@@ -102,7 +109,7 @@ export default function DonateTrees({ user }) {
       setLoadingLocations(true);
       try {
         const res = await fetch(
-          `${TREES_API_BASE}/geocode/?q=${encodeURIComponent(query)}`,
+          `${TREES_API_BASE}/geocode/?q=${encodeURIComponent(query)}&country=IN`,
           { signal: controller.signal },
         );
         const data = await res.json();
@@ -415,9 +422,21 @@ export default function DonateTrees({ user }) {
               Total: INR {totalInr}
             </p>
             {formData.latitude && formData.longitude && (
-              <p className="text-xs text-gray-500 mt-1">
-                Mapbox pin: {formData.latitude}, {formData.longitude}
-              </p>
+              <div className="text-xs text-gray-500 mt-1 space-y-1">
+                <p>
+                  Mapbox pin: {formData.latitude}, {formData.longitude}
+                </p>
+                {selectedLocationMapUrl && (
+                  <a
+                    href={selectedLocationMapUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block text-emerald-700 font-semibold hover:underline"
+                  >
+                    Verify selected location on Mapbox
+                  </a>
+                )}
+              </div>
             )}
           </div>
 

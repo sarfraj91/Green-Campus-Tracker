@@ -107,7 +107,7 @@ const Footer = () => {
 
         {/* Bottom Section */}
         <div className="border-t border-gray-200 mt-12 pt-6 flex flex-col md:flex-row justify-between items-center text-gray-500 text-sm">
-          <p>© 2026 Go Green Initiative. All rights reserved.</p>
+          <p>© 2026 Green Campus Tracker Initiative. All rights reserved.</p>
           <div className="flex gap-6 mt-4 md:mt-0">
             <Link to="/privacy" className="hover:text-emerald-600 transition">
               Privacy Policy

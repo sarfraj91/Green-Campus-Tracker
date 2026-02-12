@@ -3,12 +3,15 @@ import hmac
 import json
 import logging
 import secrets
+from datetime import date
 from email.utils import parseaddr
 from urllib.parse import quote
 
 import requests
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db.models import IntegerField, Sum
+from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -28,12 +31,37 @@ def _certificate_url(token):
     return f"{settings.FRONTEND_URL}/certificate/{token}"
 
 
-def _map_link(latitude, longitude, location_text):
-    if latitude is not None and longitude is not None:
-        return f"https://www.google.com/maps?q={latitude},{longitude}"
+def _mapbox_live_map_url(latitude, longitude):
+    if latitude is None or longitude is None:
+        return None
+    if not settings.MAPBOX_ACCESS_TOKEN:
+        return None
+    return (
+        "https://api.mapbox.com/styles/v1/mapbox/streets-v12.html"
+        f"?title=false&zoomwheel=true&access_token={quote(settings.MAPBOX_ACCESS_TOKEN)}"
+        f"#14/{latitude}/{longitude}"
+    )
+
+
+def _mapbox_search_url(latitude, longitude, location_text):
+    live_map = _mapbox_live_map_url(latitude, longitude)
+    if live_map:
+        return live_map
     if location_text:
-        return f"https://www.google.com/maps/search/{quote(location_text)}"
+        return f"https://www.mapbox.com/search?query={quote(location_text)}"
     return None
+
+
+def _mapbox_static_map_url(latitude, longitude):
+    if latitude is None or longitude is None:
+        return None
+    if not settings.MAPBOX_ACCESS_TOKEN:
+        return None
+    return (
+        "https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/"
+        f"pin-s+0f766e({longitude},{latitude})/{longitude},{latitude},13,0/720x360"
+        f"?access_token={settings.MAPBOX_ACCESS_TOKEN}"
+    )
 
 
 def _carbon_offset_kg_per_year(tree_count):
@@ -56,15 +84,31 @@ def _serialize_donation(donation):
             proof_image_2_url = str(donation.proof_image_2)
 
     planted_tree_count = donation.trees_planted_count or donation.number_of_trees or 0
-    planted_map_url = _map_link(
+    planted_map_url = _mapbox_search_url(
         donation.planted_latitude,
         donation.planted_longitude,
         donation.planted_location,
     )
-    requested_map_url = _map_link(
+    planted_map_live_url = _mapbox_live_map_url(
+        donation.planted_latitude,
+        donation.planted_longitude,
+    )
+    planted_map_image_url = _mapbox_static_map_url(
+        donation.planted_latitude,
+        donation.planted_longitude,
+    )
+    requested_map_url = _mapbox_search_url(
         donation.latitude,
         donation.longitude,
         donation.planting_location,
+    )
+    requested_map_live_url = _mapbox_live_map_url(
+        donation.latitude,
+        donation.longitude,
+    )
+    requested_map_image_url = _mapbox_static_map_url(
+        donation.latitude,
+        donation.longitude,
     )
     carbon_offset = _carbon_offset_kg_per_year(planted_tree_count)
 
@@ -119,6 +163,8 @@ def _serialize_donation(donation):
             "latitude": donation.latitude,
             "longitude": donation.longitude,
             "requested_map_url": requested_map_url,
+            "requested_map_live_url": requested_map_live_url,
+            "requested_map_image_url": requested_map_image_url,
             "objective": donation.objective,
             "dedication_name": donation.dedication_name,
             "notes": donation.notes,
@@ -133,6 +179,8 @@ def _serialize_donation(donation):
             "planted_latitude": donation.planted_latitude,
             "planted_longitude": donation.planted_longitude,
             "planted_map_url": planted_map_url,
+            "planted_map_live_url": planted_map_live_url,
+            "planted_map_image_url": planted_map_image_url,
             "plantation_date": donation.plantation_date.isoformat()
             if donation.plantation_date
             else None,
@@ -208,9 +256,14 @@ def _admin_email():
 
 
 def _build_admin_message(donation):
-    map_link = "-"
-    if donation.latitude is not None and donation.longitude is not None:
-        map_link = f"https://www.google.com/maps?q={donation.latitude},{donation.longitude}"
+    map_link = _mapbox_live_map_url(donation.latitude, donation.longitude) or _mapbox_search_url(
+        None,
+        None,
+        donation.planting_location,
+    )
+    if not map_link:
+        map_link = "-"
+    map_image = _mapbox_static_map_url(donation.latitude, donation.longitude) or "-"
     carbon_offset = _carbon_offset_kg_per_year(
         donation.trees_planted_count or donation.number_of_trees
     )
@@ -228,7 +281,8 @@ def _build_admin_message(donation):
         f"Planting Location: {donation.planting_location}",
         f"Latitude: {donation.latitude if donation.latitude is not None else '-'}",
         f"Longitude: {donation.longitude if donation.longitude is not None else '-'}",
-        f"Map Link: {map_link}",
+        f"Mapbox Link: {map_link}",
+        f"Mapbox Static Preview: {map_image}",
         f"Dedication: {donation.dedication_name or '-'}",
         f"Notes: {donation.notes or '-'}",
         f"Amount: {donation.amount_paise / 100:.2f} {donation.currency}",
@@ -285,6 +339,7 @@ def geocode_locations(request):
     query = (request.GET.get("q") or "").strip()
     if len(query) < 3:
         return JsonResponse({"results": []})
+    country = (request.GET.get("country") or "").strip()
 
     if not settings.MAPBOX_ACCESS_TOKEN:
         return JsonResponse(
@@ -301,7 +356,11 @@ def geocode_locations(request):
             "access_token": settings.MAPBOX_ACCESS_TOKEN,
             "autocomplete": "true",
             "limit": 5,
+            "types": "place,locality,neighborhood,address",
+            "language": "en",
         }
+        if country:
+            params["country"] = country.lower()
         response = requests.get(url, params=params, timeout=15)
         response.raise_for_status()
         payload = response.json()
@@ -682,6 +741,134 @@ def user_order_detail(request, donation_id):
         return JsonResponse({"message": "Order deleted successfully"})
 
     return JsonResponse({"error": "Invalid request"}, status=400)
+
+
+@csrf_exempt
+def public_impact(request):
+    if request.method != "GET":
+        return JsonResponse({"error": "Invalid request"}, status=400)
+
+    paid_orders = TreeDonation.objects.filter(payment_status="paid")
+    approved_orders = paid_orders.filter(approval_status="approved")
+
+    # Public totals should reflect all paid plantation entries in DB.
+    trees_total = (
+        paid_orders.annotate(
+            counted_trees=Coalesce(
+                "trees_planted_count",
+                "number_of_trees",
+                output_field=IntegerField(),
+            )
+        ).aggregate(total=Coalesce(Sum("counted_trees"), 0))["total"]
+        or 0
+    )
+    approved_trees_total = (
+        approved_orders.annotate(
+            counted_trees=Coalesce(
+                "trees_planted_count",
+                "number_of_trees",
+                output_field=IntegerField(),
+            )
+        ).aggregate(total=Coalesce(Sum("counted_trees"), 0))["total"]
+        or 0
+    )
+
+    active_donors = paid_orders.values("email").distinct().count()
+    donors_total = active_donors
+
+    approved_projects = approved_orders.count()
+    total_projects = paid_orders.count()
+    approval_rate = (
+        round((approved_projects / total_projects) * 100, 1) if total_projects else 0
+    )
+
+    donation_amount_paise = (
+        paid_orders.aggregate(total=Coalesce(Sum("amount_paise"), 0))["total"] or 0
+    )
+    donations_inr_total = round(donation_amount_paise / 100, 2)
+
+    co2_offset_kg = round(
+        trees_total * settings.CARBON_OFFSET_PER_TREE_KG_PER_YEAR,
+        2,
+    )
+    co2_offset_tonnes = round(co2_offset_kg / 1000, 2)
+
+    today = timezone.localdate()
+    months = []
+    month_totals = {}
+    for offset in range(5, -1, -1):
+        month = today.month - offset
+        year = today.year
+        while month <= 0:
+            month += 12
+            year -= 1
+        month_start = date(year, month, 1)
+        key = (year, month)
+        months.append((month_start, key))
+        month_totals[key] = 0
+
+    for order in paid_orders.values(
+        "plantation_date",
+        "approved_at",
+        "paid_at",
+        "created_at",
+        "trees_planted_count",
+        "number_of_trees",
+    ):
+        planted_on = order["plantation_date"]
+        if not planted_on and order["paid_at"]:
+            planted_on = order["paid_at"].date()
+        if not planted_on and order["approved_at"]:
+            planted_on = order["approved_at"].date()
+        if not planted_on and order["created_at"]:
+            planted_on = order["created_at"].date()
+        if not planted_on:
+            continue
+
+        key = (planted_on.year, planted_on.month)
+        if key not in month_totals:
+            continue
+        month_totals[key] += int(
+            order["trees_planted_count"] or order["number_of_trees"] or 0
+        )
+
+    monthly_growth = [
+        {"month": month_start.strftime("%b"), "trees": month_totals[key]}
+        for month_start, key in months
+    ]
+    peak_monthly_trees = max((item["trees"] for item in monthly_growth), default=0)
+
+    return JsonResponse(
+        {
+            "metrics": {
+                "trees_planted": trees_total,
+                "approved_trees_planted": approved_trees_total,
+                "co2_offset_tonnes": co2_offset_tonnes,
+                "co2_offset_tonnes_per_year": co2_offset_tonnes,
+                "co2_offset_kg_per_year": co2_offset_kg,
+                "donations_inr_total": donations_inr_total,
+                "active_donors": active_donors,
+                "global_donors": donors_total,
+                "approved_projects": approved_projects,
+                "total_projects": total_projects,
+                "approval_rate_percent": approval_rate,
+            },
+            "growth": {
+                "monthly_growth": monthly_growth,
+                "peak_monthly_trees": peak_monthly_trees,
+            },
+            "commitment": {
+                "operations_share_percent": 10,
+                "plantation_share_percent": 90,
+                "transparency_percent": 100,
+                "monitoring_support": "24/7",
+            },
+            "benchmarks": {
+                "community_survival_rate_percent": 85,
+                "industry_survival_rate_percent": 60,
+            },
+        }
+    )
 
 
 @csrf_exempt

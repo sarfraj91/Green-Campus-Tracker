@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("config/", views.payment_config, name="payment_config"),
     path("geocode/", views.geocode_locations, name="geocode_locations"),
+    path("public-impact/", views.public_impact, name="public_impact"),
     path("create-order/", views.create_order, name="create_tree_order"),
     path("verify-payment/", views.verify_payment, name="verify_tree_payment"),
     path("orders/", views.user_orders, name="user_tree_orders"),

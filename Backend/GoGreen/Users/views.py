@@ -1,14 +1,17 @@
 import json
 import logging
 import random
+from email.utils import parseaddr
 from threading import Thread
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db.models import Avg, Count, Q
+from django.db.utils import OperationalError, ProgrammingError
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import User
+from .models import User, UserReview
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +59,48 @@ def _parse_json_body(request):
         return json.loads(request.body or "{}")
     except json.JSONDecodeError:
         return None
+
+
+def _serialize_review(review):
+    avatar_url = None
+    user_id = None
+    if review.user:
+        user_id = review.user.id
+        if review.user.avatar:
+            try:
+                avatar_url = review.user.avatar.url
+            except Exception:
+                avatar_url = str(review.user.avatar)
+
+    return {
+        "id": review.id,
+        "user_id": user_id,
+        "full_name": review.full_name or (review.user.full_name if review.user else "Anonymous"),
+        "email": review.email,
+        "avatar": avatar_url,
+        "rating": review.rating,
+        "review_text": review.review_text or "",
+        "is_public": review.is_public,
+        "created_at": review.created_at.isoformat() if review.created_at else None,
+        "updated_at": review.updated_at.isoformat() if review.updated_at else None,
+    }
+
+
+def _support_email():
+    candidate = (
+        settings.SUPPORT_EMAIL
+        or settings.ADMIN_NOTIFICATION_EMAIL
+        or settings.DEFAULT_FROM_EMAIL
+    )
+    parsed = parseaddr(candidate)[1]
+    return parsed or candidate
+
+
+def _normalized_whatsapp_number():
+    digits = "".join(ch for ch in (settings.SUPPORT_WHATSAPP_NUMBER or "") if ch.isdigit())
+    if len(digits) == 10:
+        return f"91{digits}"
+    return digits
 
 
 @csrf_exempt
@@ -258,5 +303,193 @@ def profile_user(request):
 
         user.save()
         return JsonResponse({"message": "Profile updated", "user": _serialize_user(user)})
+
+    return JsonResponse({"error": "Invalid request"}, status=400)
+
+
+@csrf_exempt
+def support_request(request):
+    if request.method == "GET":
+        whatsapp_digits = _normalized_whatsapp_number()
+        whatsapp_display = (
+            f"+{whatsapp_digits}"
+            if whatsapp_digits
+            else settings.SUPPORT_WHATSAPP_NUMBER
+        )
+        return JsonResponse(
+            {
+                "support_email": _support_email(),
+                "whatsapp_number": whatsapp_digits or settings.SUPPORT_WHATSAPP_NUMBER,
+                "whatsapp_display": whatsapp_display,
+            }
+        )
+
+    if request.method == "POST":
+        data = _parse_json_body(request)
+        if data is None:
+            return JsonResponse({"error": "Invalid JSON body"}, status=400)
+
+        full_name = (data.get("full_name") or "").strip()
+        email = (data.get("email") or "").strip().lower()
+        phone = (data.get("phone") or "").strip()
+        subject = (data.get("subject") or "").strip() or "Support request"
+        message = (data.get("message") or "").strip()
+
+        if not email:
+            return JsonResponse({"error": "Email is required"}, status=400)
+        if not message:
+            return JsonResponse({"error": "Message is required"}, status=400)
+
+        recipient = _support_email()
+        if not recipient:
+            return JsonResponse({"error": "Support email is not configured"}, status=503)
+
+        email_body = "\n".join(
+            [
+                "New support request from dashboard:",
+                "",
+                f"Name: {full_name or '-'}",
+                f"Email: {email}",
+                f"Phone: {phone or '-'}",
+                f"Subject: {subject}",
+                "",
+                "Message:",
+                message,
+            ]
+        )
+
+        try:
+            send_mail(
+                subject=f"[GoGreen Support] {subject}",
+                message=email_body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[recipient],
+                fail_silently=False,
+            )
+        except Exception:
+            logger.exception("Failed to send support email for %s", email)
+            return JsonResponse({"error": "Unable to send support request"}, status=502)
+
+        return JsonResponse(
+            {"message": "Support request sent. Our team will contact you shortly."}
+        )
+
+    return JsonResponse({"error": "Invalid request"}, status=400)
+
+
+@csrf_exempt
+def reviews(request):
+    if request.method == "GET":
+        try:
+            user_email = (request.GET.get("email") or "").strip().lower()
+
+            queryset = (
+                UserReview.objects.filter(is_public=True)
+                .select_related("user")
+                .order_by("-updated_at")
+            )
+            summary_raw = queryset.aggregate(
+                avg=Avg("rating"),
+                total=Count("id"),
+                r1=Count("id", filter=Q(rating=1)),
+                r2=Count("id", filter=Q(rating=2)),
+                r3=Count("id", filter=Q(rating=3)),
+                r4=Count("id", filter=Q(rating=4)),
+                r5=Count("id", filter=Q(rating=5)),
+            )
+
+            current_user_review = None
+            if user_email:
+                review = UserReview.objects.filter(email=user_email).first()
+                if review:
+                    current_user_review = _serialize_review(review)
+
+            return JsonResponse(
+                {
+                    "summary": {
+                        "average_rating": round(summary_raw["avg"] or 0, 2),
+                        "total_reviews": summary_raw["total"] or 0,
+                        "rating_breakdown": {
+                            "1": summary_raw["r1"] or 0,
+                            "2": summary_raw["r2"] or 0,
+                            "3": summary_raw["r3"] or 0,
+                            "4": summary_raw["r4"] or 0,
+                            "5": summary_raw["r5"] or 0,
+                        },
+                    },
+                    "reviews": [_serialize_review(review) for review in queryset],
+                    "current_user_review": current_user_review,
+                }
+            )
+        except (OperationalError, ProgrammingError):
+            logger.exception("Reviews table/query not ready")
+            return JsonResponse(
+                {
+                    "error": (
+                        "Reviews feature is not ready in database. "
+                        "Run migrations and restart backend."
+                    )
+                },
+                status=503,
+            )
+
+    if request.method == "POST":
+        try:
+            data = _parse_json_body(request)
+            if data is None:
+                return JsonResponse({"error": "Invalid JSON body"}, status=400)
+
+            email = (data.get("email") or "").strip().lower()
+            full_name = (data.get("full_name") or "").strip()
+            review_text = (data.get("review_text") or "").strip()
+            rating = data.get("rating")
+
+            if not email:
+                return JsonResponse({"error": "Email is required"}, status=400)
+            if rating is None:
+                return JsonResponse({"error": "Rating is required"}, status=400)
+
+            try:
+                rating = int(rating)
+            except (TypeError, ValueError):
+                return JsonResponse({"error": "Rating must be a number from 1 to 5"}, status=400)
+
+            if rating < 1 or rating > 5:
+                return JsonResponse({"error": "Rating must be between 1 and 5"}, status=400)
+
+            user = User.objects.filter(email=email, is_verified=True).first()
+            if not user:
+                return JsonResponse({"error": "Verified user not found"}, status=404)
+
+            review, created = UserReview.objects.update_or_create(
+                email=email,
+                defaults={
+                    "user": user,
+                    "full_name": full_name or user.full_name,
+                    "rating": rating,
+                    "review_text": review_text,
+                    "is_public": True,
+                },
+            )
+
+            return JsonResponse(
+                {
+                    "message": "Review submitted successfully"
+                    if created
+                    else "Review updated successfully",
+                    "review": _serialize_review(review),
+                }
+            )
+        except (OperationalError, ProgrammingError):
+            logger.exception("Unable to save review due to DB state")
+            return JsonResponse(
+                {
+                    "error": (
+                        "Reviews feature is not ready in database. "
+                        "Run migrations and restart backend."
+                    )
+                },
+                status=503,
+            )
 
     return JsonResponse({"error": "Invalid request"}, status=400)

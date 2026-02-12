@@ -9,4 +9,6 @@ urlpatterns = [
     path('resend-otp/', views.resend_otp, name='resend_otp'),
     path('login/', views.login_user, name='login_user'),
     path('profile/', views.profile_user, name='profile_user'),
+    path('support/', views.support_request, name='support_request'),
+    path('reviews/', views.reviews, name='reviews'),
 ]

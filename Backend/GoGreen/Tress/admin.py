@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
+from urllib.parse import quote
 
 from .models import TreeDonation
 
@@ -104,7 +105,40 @@ class TreeDonationAdmin(admin.ModelAdmin):
 
     @admin.action(description="Mark selected orders as approved")
     def mark_approved(self, request, queryset):
-        queryset.update(approval_status="approved", approved_at=timezone.now())
+        approved_count = 0
+        emailed_count = 0
+        failed_emails = 0
+
+        for donation in queryset:
+            already_approved = donation.approval_status == "approved"
+            donation.approval_status = "approved"
+            if not donation.approved_at:
+                donation.approved_at = timezone.now()
+            if not donation.trees_planted_count:
+                donation.trees_planted_count = donation.number_of_trees
+            if not donation.planted_location:
+                donation.planted_location = donation.planting_location
+            if donation.planted_latitude is None and donation.latitude is not None:
+                donation.planted_latitude = donation.latitude
+            if donation.planted_longitude is None and donation.longitude is not None:
+                donation.planted_longitude = donation.longitude
+            donation.save()
+            approved_count += 1
+
+            if not already_approved:
+                try:
+                    self._send_approval_email(donation)
+                    emailed_count += 1
+                except Exception:
+                    failed_emails += 1
+
+        if approved_count:
+            self.message_user(
+                request,
+                f"{approved_count} order(s) approved. "
+                f"Emails sent: {emailed_count}, failed: {failed_emails}.",
+                level=messages.SUCCESS if failed_emails == 0 else messages.WARNING,
+            )
 
     @admin.action(description="Mark selected orders as rejected")
     def mark_rejected(self, request, queryset):
@@ -122,6 +156,38 @@ class TreeDonationAdmin(admin.ModelAdmin):
         except Exception:
             return str(image_field)
 
+    def _mapbox_search_url(self, latitude, longitude, location_text):
+        live_url = self._mapbox_live_map_url(latitude, longitude)
+        if live_url:
+            return live_url
+        if location_text:
+            return f"https://www.mapbox.com/search?query={quote(location_text)}"
+        return "-"
+
+    def _mapbox_live_map_url(self, latitude, longitude):
+        token = getattr(settings, "MAPBOX_ACCESS_TOKEN", "")
+        if not token:
+            return "-"
+        if latitude is None or longitude is None:
+            return "-"
+        return (
+            "https://api.mapbox.com/styles/v1/mapbox/streets-v12.html"
+            f"?title=false&zoomwheel=true&access_token={quote(token)}"
+            f"#14/{latitude}/{longitude}"
+        )
+
+    def _mapbox_static_map_url(self, latitude, longitude):
+        token = getattr(settings, "MAPBOX_ACCESS_TOKEN", "")
+        if not token:
+            return "-"
+        if latitude is None or longitude is None:
+            return "-"
+        return (
+            "https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/"
+            f"pin-s+0f766e({longitude},{latitude})/{longitude},{latitude},13,0/720x360"
+            f"?access_token={token}"
+        )
+
     def _send_approval_email(self, donation):
         if not donation.email:
             return
@@ -138,12 +204,19 @@ class TreeDonationAdmin(admin.ModelAdmin):
             trees_counted * getattr(settings, "CARBON_OFFSET_PER_TREE_KG_PER_YEAR", 21),
             2,
         )
-        planted_map = "-"
-        if donation.planted_latitude is not None and donation.planted_longitude is not None:
-            planted_map = (
-                f"https://www.google.com/maps?q={donation.planted_latitude},"
-                f"{donation.planted_longitude}"
-            )
+        planted_map = self._mapbox_search_url(
+            donation.planted_latitude,
+            donation.planted_longitude,
+            donation.planted_location or donation.planting_location,
+        )
+        planted_map_live = self._mapbox_live_map_url(
+            donation.planted_latitude,
+            donation.planted_longitude,
+        )
+        planted_map_preview = self._mapbox_static_map_url(
+            donation.planted_latitude,
+            donation.planted_longitude,
+        )
 
         proof_1 = self._proof_url(donation.proof_image_1)
         proof_2 = self._proof_url(donation.proof_image_2)
@@ -152,12 +225,15 @@ class TreeDonationAdmin(admin.ModelAdmin):
             "",
             "Your tree plantation order has been approved.",
             f"Order ID: {donation.id}",
+            f"Approval Status: {(donation.approval_status or 'pending').upper()}",
             f"Trees Ordered: {donation.number_of_trees}",
             f"Trees Planted Count: {trees_counted}",
             f"Planting Location: {donation.planted_location or donation.planting_location}",
             f"Plantation Date: {donation.plantation_date or '-'}",
             f"Coordinates: {donation.planted_latitude if donation.planted_latitude is not None else '-'}, {donation.planted_longitude if donation.planted_longitude is not None else '-'}",
-            f"Map Location: {planted_map}",
+            f"Mapbox Location: {planted_map}",
+            f"Mapbox Live Map: {planted_map_live}",
+            f"Mapbox Preview: {planted_map_preview}",
             f"Estimated Carbon Offset: {carbon_offset} kg/year",
             "",
             "Plantation Update:",
@@ -177,7 +253,7 @@ class TreeDonationAdmin(admin.ModelAdmin):
             certificate_url,
             "",
             "Regards,",
-            "Go Green Team",
+            "Green Campus Tracker Team",
         ]
 
         send_mail(

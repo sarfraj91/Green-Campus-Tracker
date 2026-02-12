@@ -71,7 +71,15 @@ export default function OrderTracking() {
 
   const approval = order.approval_details || {};
   const userOrder = order.user_order_details || {};
-  const mapUrl = approval.planted_map_url || userOrder.requested_map_url;
+  const mapUrl =
+    approval.planted_map_live_url ||
+    approval.planted_map_url ||
+    userOrder.requested_map_live_url ||
+    userOrder.requested_map_url;
+  const mapImageUrl =
+    approval.planted_map_image_url || userOrder.requested_map_image_url;
+  const mapLabel =
+    approval.planted_location || userOrder.planting_location || "Plantation location";
 
   return (
     <div className="min-h-screen bg-gray-100 py-10 px-4">
@@ -127,6 +135,19 @@ export default function OrderTracking() {
             </p>
           </div>
 
+          {mapImageUrl && (
+            <div className="mb-6 rounded-2xl overflow-hidden border border-emerald-100 shadow-sm">
+              <img
+                src={mapImageUrl}
+                alt={`Map pin for ${mapLabel}`}
+                className="w-full h-44 object-cover"
+              />
+              <div className="px-4 py-3 bg-emerald-50/70 text-xs text-emerald-800 font-medium">
+                Mapbox Pin: {mapLabel}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between gap-3">
             <Link
               to={`/certificate/${order.tracking_token}`}
@@ -141,7 +162,7 @@ export default function OrderTracking() {
                 rel="noreferrer"
                 className="px-5 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition"
               >
-                Open Map
+                Open Mapbox
               </a>
             )}
           </div>

@@ -174,11 +174,22 @@ RAZORPAY_KEY_SECRET = (
     or os.getenv('RAZOR_PAY_SECRET_kEY')
     or ''
 ).strip()
-MAPBOX_ACCESS_TOKEN = os.getenv('MAPBOX_ACCESS_TOKEN', '')
+MAPBOX_ACCESS_TOKEN = (
+    os.getenv('MAPBOX_ACCESS_TOKEN')
+    or os.getenv('MAPBOX_TOKEN')
+    or ''
+).strip()
 TREE_PRICE_INR = int(os.getenv('TREE_PRICE_INR', 99))
 ADMIN_NOTIFICATION_EMAIL = os.getenv('ADMIN_NOTIFICATION_EMAIL', EMAIL_HOST_USER)
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
 CARBON_OFFSET_PER_TREE_KG_PER_YEAR = float(
     os.getenv('CARBON_OFFSET_PER_TREE_KG_PER_YEAR', 21)
 )
+SUPPORT_WHATSAPP_NUMBER = (os.getenv('SUPPORT_WHATSAPP_NUMBER') or '7061609072').strip()
+SUPPORT_EMAIL = (
+    os.getenv('SUPPORT_EMAIL')
+    or ADMIN_NOTIFICATION_EMAIL
+    or DEFAULT_FROM_EMAIL
+    or ''
+).strip()
 
