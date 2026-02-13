@@ -90,8 +90,12 @@ Green Campus Tracker/
 
 Backend reads environment variables from `.env` (recommended at `Backend/GoGreen/.env`).
 
-### Required for normal production-like flow(.env file)
+### Required for normal production-like flow (.env file)
 
+- `DJANGO_SECRET_KEY`
+- `DEBUG` (set to `False` in production)
+- `ALLOWED_HOSTS` (comma-separated)
+- `FRONTEND_URL`
 - `DATABASE_URL`
 - `SMTP_USER`
 - `SMTP_PASS`
@@ -101,9 +105,13 @@ Backend reads environment variables from `.env` (recommended at `Backend/GoGreen
 
 ### Useful optional settings
 
+- `CORS_ALLOWED_ORIGINS` (comma-separated origins)
+- `CSRF_TRUSTED_ORIGINS` (comma-separated origins)
 - `SMTP_HOST` (default `smtp.gmail.com`)
 - `SMTP_PORT` (default `587`)
 - `SMTP_ADMIN` (fallback sender)
+- `SECURE_SSL_REDIRECT` (default `True` when `DEBUG=False`)
+- `SECURE_HSTS_SECONDS` (default `31536000`)
 - `TREE_PRICE_INR` (default `99`)
 - `CARBON_OFFSET_PER_TREE_KG_PER_YEAR` (default `21`)
 - `ADMIN_NOTIFICATION_EMAIL`
@@ -114,6 +122,16 @@ Backend reads environment variables from `.env` (recommended at `Backend/GoGreen
 ### Example `.env`
 
 ```env
+# Core Django
+DJANGO_SECRET_KEY=replace-with-a-long-random-secret
+DEBUG=False
+ALLOWED_HOSTS=api.example.com
+
+# Frontend origin / CORS / CSRF
+FRONTEND_URL=https://app.example.com
+CORS_ALLOWED_ORIGINS=https://app.example.com
+CSRF_TRUSTED_ORIGINS=https://app.example.com
+
 # Database
 DATABASE_URL=postgres://postgres:password@localhost:5432/greencampus
 
@@ -143,6 +161,12 @@ ADMIN_NOTIFICATION_EMAIL=admin@example.com
 FRONTEND_URL=http://localhost:5173
 SUPPORT_WHATSAPP_NUMBER=7061609072
 SUPPORT_EMAIL=support@example.com
+```
+
+### Frontend environment (`Frontend/.env`)
+
+```env
+VITE_API_BASE_URL=https://api.example.com
 ```
 
 ## Local Setup

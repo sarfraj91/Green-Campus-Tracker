@@ -1,1 +1,22 @@
+
+# Environment files
 .env
+.env.*
+!.env.example
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Django runtime and build artifacts
+db.sqlite3
+media/
+staticfiles/
+*.log

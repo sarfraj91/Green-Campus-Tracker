@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { USERS_API_BASE } from "../../config/api";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -50,13 +51,10 @@ export default function Register() {
         data.append("avatar", formData.avatar);
       }
 
-      const response = await fetch(
-        "http://127.0.0.1:8000/api/users/register/",
-        {
-          method: "POST",
-          body: data,
-        },
-      );
+      const response = await fetch(`${USERS_API_BASE}/register/`, {
+        method: "POST",
+        body: data,
+      });
 
       const text = await response.text();
 

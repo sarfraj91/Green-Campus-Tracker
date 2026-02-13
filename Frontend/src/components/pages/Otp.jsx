@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { USERS_API_BASE } from "../../config/api";
 
 function VerifyOTP({ onLogin }) {
   const location = useLocation();
@@ -27,7 +28,7 @@ function VerifyOTP({ onLogin }) {
     setLoading(true);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/users/verify-otp/", {
+      const res = await fetch(`${USERS_API_BASE}/verify-otp/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -58,7 +59,7 @@ function VerifyOTP({ onLogin }) {
     setResending(true);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/users/resend-otp/", {
+      const res = await fetch(`${USERS_API_BASE}/resend-otp/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

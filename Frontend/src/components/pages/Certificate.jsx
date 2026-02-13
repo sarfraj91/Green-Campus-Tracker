@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-
-const TREES_API_BASE = "http://127.0.0.1:8000/api/trees";
+import { TREES_API_BASE } from "../../config/api";
 
 const formatDate = (value) => {
   if (!value) return "-";

@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Headset, Mail, MessageCircle, Send, Star } from "lucide-react";
-
-const TREES_API_BASE = "http://127.0.0.1:8000/api/trees";
-const USERS_API_BASE = "http://127.0.0.1:8000/api/users";
+import { TREES_API_BASE, USERS_API_BASE } from "../../config/api";
 
 const DEFAULT_SUPPORT_CONTACT = {
   support_email: "support@greencampustracker.com",

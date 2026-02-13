@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { USERS_API_BASE } from "../../config/api";
 
 const fallbackAvatar = (name) =>
   `https://ui-avatars.com/api/?name=${encodeURIComponent(
@@ -49,7 +50,7 @@ export default function Profile({ user, onProfileUpdated }) {
     setError("");
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/api/users/profile/?email=${encodeURIComponent(user.email)}`,
+        `${USERS_API_BASE}/profile/?email=${encodeURIComponent(user.email)}`,
       );
       const result = await parseResponse(response);
       if (!response.ok) {
@@ -114,7 +115,7 @@ export default function Profile({ user, onProfileUpdated }) {
         payload.append("avatar", formData.avatar);
       }
 
-      const response = await fetch("http://127.0.0.1:8000/api/users/profile/", {
+      const response = await fetch(`${USERS_API_BASE}/profile/`, {
         method: "POST",
         body: payload,
       });

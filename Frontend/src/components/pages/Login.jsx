@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { USERS_API_BASE } from "../../config/api";
 
 export default function Login({ onLogin }) {
   const navigate = useNavigate();
@@ -24,7 +25,7 @@ export default function Login({ onLogin }) {
     setLoading(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/users/login/", {
+      const response = await fetch(`${USERS_API_BASE}/login/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

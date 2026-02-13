@@ -11,9 +11,7 @@ import {
   TreePine,
   Wallet,
 } from "lucide-react";
-
-const TREES_API_BASE = "http://127.0.0.1:8000/api/trees";
-const USERS_API_BASE = "http://127.0.0.1:8000/api/users";
+import { TREES_API_BASE, USERS_API_BASE } from "../../../config/api";
 
 const FALLBACK_IMPACT = {
   trees_planted: 15517,
