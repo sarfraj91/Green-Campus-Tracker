@@ -6,6 +6,11 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv()
 
+
+def _split_csv_env(name, default=""):
+    raw = os.getenv(name, default) or ""
+    return [item.strip().rstrip("/") for item in raw.split(",") if item.strip()]
+
 # ==========================================================
 # BASIC SETTINGS
 # ==========================================================
@@ -99,20 +104,25 @@ MEDIA_ROOT = BASE_DIR / "media"
 # CORS + CSRF (VERY IMPORTANT FOR VERCEL)
 # ==========================================================
 
-FRONTEND_URL = os.getenv(
-    "FRONTEND_URL",
-    "https://green-campus-tracker-three.vercel.app"
+FRONTEND_URL = (
+    os.getenv("FRONTEND_URL", "https://green-campus-tracker-three.vercel.app")
+    .strip()
+    .rstrip("/")
 )
 
-CORS_ALLOWED_ORIGINS = [
-    FRONTEND_URL,
+CORS_ALLOWED_ORIGINS = _split_csv_env("CORS_ALLOWED_ORIGINS", FRONTEND_URL)
+if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.vercel\.app$",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = [
-    FRONTEND_URL,
-]
+CSRF_TRUSTED_ORIGINS = _split_csv_env("CSRF_TRUSTED_ORIGINS", FRONTEND_URL)
+if FRONTEND_URL and FRONTEND_URL not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS.append(FRONTEND_URL)
 
 # Cross-domain cookie support
 CSRF_COOKIE_SAMESITE = "None"

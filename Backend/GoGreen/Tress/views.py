@@ -12,6 +12,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.db.models import IntegerField, Sum
 from django.db.models.functions import Coalesce
+from django.db.utils import OperationalError, ProgrammingError
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -748,95 +749,110 @@ def public_impact(request):
     if request.method != "GET":
         return JsonResponse({"error": "Invalid request"}, status=400)
 
-    paid_orders = TreeDonation.objects.filter(payment_status="paid")
-    approved_orders = paid_orders.filter(approval_status="approved")
+    try:
+        paid_orders = TreeDonation.objects.filter(payment_status="paid")
+        approved_orders = paid_orders.filter(approval_status="approved")
 
-    # Public totals should reflect all paid plantation entries in DB.
-    trees_total = (
-        paid_orders.annotate(
-            counted_trees=Coalesce(
-                "trees_planted_count",
-                "number_of_trees",
-                output_field=IntegerField(),
-            )
-        ).aggregate(total=Coalesce(Sum("counted_trees"), 0))["total"]
-        or 0
-    )
-    approved_trees_total = (
-        approved_orders.annotate(
-            counted_trees=Coalesce(
-                "trees_planted_count",
-                "number_of_trees",
-                output_field=IntegerField(),
-            )
-        ).aggregate(total=Coalesce(Sum("counted_trees"), 0))["total"]
-        or 0
-    )
-
-    active_donors = paid_orders.values("email").distinct().count()
-    donors_total = active_donors
-
-    approved_projects = approved_orders.count()
-    total_projects = paid_orders.count()
-    approval_rate = (
-        round((approved_projects / total_projects) * 100, 1) if total_projects else 0
-    )
-
-    donation_amount_paise = (
-        paid_orders.aggregate(total=Coalesce(Sum("amount_paise"), 0))["total"] or 0
-    )
-    donations_inr_total = round(donation_amount_paise / 100, 2)
-
-    co2_offset_kg = round(
-        trees_total * settings.CARBON_OFFSET_PER_TREE_KG_PER_YEAR,
-        2,
-    )
-    co2_offset_tonnes = round(co2_offset_kg / 1000, 2)
-
-    today = timezone.localdate()
-    months = []
-    month_totals = {}
-    for offset in range(5, -1, -1):
-        month = today.month - offset
-        year = today.year
-        while month <= 0:
-            month += 12
-            year -= 1
-        month_start = date(year, month, 1)
-        key = (year, month)
-        months.append((month_start, key))
-        month_totals[key] = 0
-
-    for order in paid_orders.values(
-        "plantation_date",
-        "approved_at",
-        "paid_at",
-        "created_at",
-        "trees_planted_count",
-        "number_of_trees",
-    ):
-        planted_on = order["plantation_date"]
-        if not planted_on and order["paid_at"]:
-            planted_on = order["paid_at"].date()
-        if not planted_on and order["approved_at"]:
-            planted_on = order["approved_at"].date()
-        if not planted_on and order["created_at"]:
-            planted_on = order["created_at"].date()
-        if not planted_on:
-            continue
-
-        key = (planted_on.year, planted_on.month)
-        if key not in month_totals:
-            continue
-        month_totals[key] += int(
-            order["trees_planted_count"] or order["number_of_trees"] or 0
+        # Public totals should reflect all paid plantation entries in DB.
+        trees_total = (
+            paid_orders.annotate(
+                counted_trees=Coalesce(
+                    "trees_planted_count",
+                    "number_of_trees",
+                    output_field=IntegerField(),
+                )
+            ).aggregate(total=Coalesce(Sum("counted_trees"), 0))["total"]
+            or 0
+        )
+        approved_trees_total = (
+            approved_orders.annotate(
+                counted_trees=Coalesce(
+                    "trees_planted_count",
+                    "number_of_trees",
+                    output_field=IntegerField(),
+                )
+            ).aggregate(total=Coalesce(Sum("counted_trees"), 0))["total"]
+            or 0
         )
 
-    monthly_growth = [
-        {"month": month_start.strftime("%b"), "trees": month_totals[key]}
-        for month_start, key in months
-    ]
-    peak_monthly_trees = max((item["trees"] for item in monthly_growth), default=0)
+        active_donors = paid_orders.values("email").distinct().count()
+        donors_total = active_donors
+
+        approved_projects = approved_orders.count()
+        total_projects = paid_orders.count()
+        approval_rate = (
+            round((approved_projects / total_projects) * 100, 1) if total_projects else 0
+        )
+
+        donation_amount_paise = (
+            paid_orders.aggregate(total=Coalesce(Sum("amount_paise"), 0))["total"] or 0
+        )
+        donations_inr_total = round(donation_amount_paise / 100, 2)
+
+        co2_offset_kg = round(
+            trees_total * settings.CARBON_OFFSET_PER_TREE_KG_PER_YEAR,
+            2,
+        )
+        co2_offset_tonnes = round(co2_offset_kg / 1000, 2)
+
+        today = timezone.localdate()
+        months = []
+        month_totals = {}
+        for offset in range(5, -1, -1):
+            month = today.month - offset
+            year = today.year
+            while month <= 0:
+                month += 12
+                year -= 1
+            month_start = date(year, month, 1)
+            key = (year, month)
+            months.append((month_start, key))
+            month_totals[key] = 0
+
+        for order in paid_orders.values(
+            "plantation_date",
+            "approved_at",
+            "paid_at",
+            "created_at",
+            "trees_planted_count",
+            "number_of_trees",
+        ):
+            planted_on = order["plantation_date"]
+            if not planted_on and order["paid_at"]:
+                planted_on = order["paid_at"].date()
+            if not planted_on and order["approved_at"]:
+                planted_on = order["approved_at"].date()
+            if not planted_on and order["created_at"]:
+                planted_on = order["created_at"].date()
+            if not planted_on:
+                continue
+
+            key = (planted_on.year, planted_on.month)
+            if key not in month_totals:
+                continue
+            month_totals[key] += int(
+                order["trees_planted_count"] or order["number_of_trees"] or 0
+            )
+
+        monthly_growth = [
+            {"month": month_start.strftime("%b"), "trees": month_totals[key]}
+            for month_start, key in months
+        ]
+        peak_monthly_trees = max((item["trees"] for item in monthly_growth), default=0)
+    except (OperationalError, ProgrammingError):
+        logger.exception("Public impact query failed. Returning safe fallback metrics.")
+        trees_total = 0
+        approved_trees_total = 0
+        co2_offset_kg = 0
+        co2_offset_tonnes = 0
+        donations_inr_total = 0
+        active_donors = 0
+        donors_total = 0
+        approved_projects = 0
+        total_projects = 0
+        approval_rate = 0
+        monthly_growth = []
+        peak_monthly_trees = 0
 
     return JsonResponse(
         {
