@@ -1,34 +1,3 @@
-# ==============================
-# Green Campus Tracker - Backend dependencies
-# Install: pip install -r requirements.txt
-# ==============================
-
-# Core web framework (routing, models, admin, auth, migrations)
-Django>=5.0
-
-# Build REST-style APIs (serializers, API utilities)
-djangorestframework>=3.15
-
-# Allow frontend (Vite/React) to call backend APIs from browser
-django-cors-headers>=4.3
-
-# Load environment variables from .env file
-python-dotenv>=1.0
-
-# Parse DATABASE_URL (PostgreSQL/SQLite style URL -> Django DATABASES config)
-dj-database-url>=2.1
-
-# HTTP client for external APIs (Mapbox geocoding, Razorpay validation/order calls)
-requests>=2.31
-
-# Cloudinary SDK for media uploads/URLs (avatars and plantation proof images)
-cloudinary>=1.41
-
-# Django storage backend adapter for Cloudinary
-django-cloudinary-storage>=0.3.0
-
-# PostgreSQL database driver used by Django when DATABASE_URL points to Postgres
-psycopg2-binary>=2.9
-
-Install with:
-pip install -r requirements.txt
+# Repo-level pointer to backend server requirements.
+# This keeps Render/CI safe even if build runs from repository root.
+-r Backend/GoGreen/requirements.txt

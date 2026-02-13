@@ -201,6 +201,34 @@ npm run dev
 
 Frontend will run at: `http://localhost:5173`
 
+## Render Deployment (Recommended Settings)
+
+### Backend (Django)
+
+- `Root Directory`: `Backend/GoGreen`
+- `Build Command`: `pip install --upgrade pip && pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate`
+- `Start Command`: `gunicorn GoGreen.wsgi:application`
+- `Python Version`: `3.13.4` (already pinned with `Backend/GoGreen/.python-version` and `Backend/GoGreen/runtime.txt`)
+
+Set these environment variables in Render:
+
+- `DJANGO_SECRET_KEY`
+- `DEBUG=False`
+- `ALLOWED_HOSTS=<your-backend-domain>`
+- `FRONTEND_URL=<your-frontend-domain>`
+- `CORS_ALLOWED_ORIGINS=<your-frontend-domain>`
+- `CSRF_TRUSTED_ORIGINS=<your-frontend-domain>`
+- `DATABASE_URL`
+- SMTP / Razorpay / Mapbox / Cloudinary variables from `.env.example`
+
+### Frontend (Vite static site)
+
+- `Root Directory`: `Frontend`
+- `Build Command`: `npm ci && npm run build`
+- `Publish Directory`: `dist`
+- Environment variable:
+  - `VITE_API_BASE_URL=<your-backend-domain>`
+
 ## API Map (Backend)
 
 Base URL: `http://127.0.0.1:8000`
