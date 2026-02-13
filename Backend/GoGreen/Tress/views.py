@@ -589,159 +589,185 @@ def user_orders(request):
     if request.method != "GET":
         return JsonResponse({"error": "Invalid request"}, status=400)
 
-    email = _extract_email_from_request(request)
-    user = _get_verified_user(email)
-    if not user:
-        return JsonResponse({"error": "Verified user not found"}, status=404)
+    try:
+        email = _extract_email_from_request(request)
+        user = _get_verified_user(email)
+        if not user:
+            return JsonResponse({"error": "Verified user not found"}, status=404)
 
-    orders = TreeDonation.objects.filter(user=user, is_user_deleted=False)
-    return JsonResponse(
-        {
-            "orders": [_serialize_donation(order) for order in orders],
-            "summary": {
-                "total_orders": orders.count(),
-                "completed_orders": orders.filter(
-                    payment_status="paid", approval_status="approved"
-                ).count(),
-                "pending_orders": orders.filter(
-                    payment_status="paid", approval_status="pending"
-                ).count(),
-                "rejected_orders": orders.filter(approval_status="rejected").count(),
-                "unpaid_orders": orders.exclude(payment_status="paid").count(),
+        orders = TreeDonation.objects.filter(user=user, is_user_deleted=False)
+        return JsonResponse(
+            {
+                "orders": [_serialize_donation(order) for order in orders],
+                "summary": {
+                    "total_orders": orders.count(),
+                    "completed_orders": orders.filter(
+                        payment_status="paid", approval_status="approved"
+                    ).count(),
+                    "pending_orders": orders.filter(
+                        payment_status="paid", approval_status="pending"
+                    ).count(),
+                    "rejected_orders": orders.filter(approval_status="rejected").count(),
+                    "unpaid_orders": orders.exclude(payment_status="paid").count(),
+                },
+            }
+        )
+    except (OperationalError, ProgrammingError):
+        logger.exception("Orders query failed. Database may be missing migrations.")
+        return JsonResponse(
+            {
+                "error": (
+                    "Orders are not ready in database. "
+                    "Run migrations and restart backend."
+                )
             },
-        }
-    )
+            status=503,
+        )
 
 
 @csrf_exempt
 def user_order_detail(request, donation_id):
-    data = _parse_json_body(request) if request.method in {"PUT", "PATCH", "DELETE"} else None
-    email = _extract_email_from_request(request, data)
-    user = _get_verified_user(email)
-    if not user:
-        return JsonResponse({"error": "Verified user not found"}, status=404)
+    try:
+        data = (
+            _parse_json_body(request) if request.method in {"PUT", "PATCH", "DELETE"} else None
+        )
+        email = _extract_email_from_request(request, data)
+        user = _get_verified_user(email)
+        if not user:
+            return JsonResponse({"error": "Verified user not found"}, status=404)
 
-    donation = TreeDonation.objects.filter(
-        id=donation_id, user=user, is_user_deleted=False
-    ).first()
-    if not donation:
-        return JsonResponse({"error": "Order not found"}, status=404)
+        donation = TreeDonation.objects.filter(
+            id=donation_id, user=user, is_user_deleted=False
+        ).first()
+        if not donation:
+            return JsonResponse({"error": "Order not found"}, status=404)
 
-    if request.method == "GET":
-        return JsonResponse({"order": _serialize_donation(donation)})
+        if request.method == "GET":
+            return JsonResponse({"order": _serialize_donation(donation)})
 
-    if request.method in {"PUT", "PATCH"}:
-        if data is None:
-            return JsonResponse({"error": "Invalid JSON body"}, status=400)
+        if request.method in {"PUT", "PATCH"}:
+            if data is None:
+                return JsonResponse({"error": "Invalid JSON body"}, status=400)
 
-        full_name = data.get("full_name")
-        phone = data.get("phone")
-        number_of_trees = data.get("number_of_trees")
-        tree_species = data.get("tree_species")
-        planting_location = data.get("planting_location")
-        latitude = data.get("latitude")
-        longitude = data.get("longitude")
-        objective = data.get("objective")
-        dedication_name = data.get("dedication_name")
-        notes = data.get("notes")
+            full_name = data.get("full_name")
+            phone = data.get("phone")
+            number_of_trees = data.get("number_of_trees")
+            tree_species = data.get("tree_species")
+            planting_location = data.get("planting_location")
+            latitude = data.get("latitude")
+            longitude = data.get("longitude")
+            objective = data.get("objective")
+            dedication_name = data.get("dedication_name")
+            notes = data.get("notes")
 
-        has_updates = False
+            has_updates = False
 
-        if full_name is not None:
-            full_name = str(full_name).strip()
-            if not full_name:
-                return JsonResponse({"error": "Full name cannot be empty"}, status=400)
-            donation.full_name = full_name
-            has_updates = True
+            if full_name is not None:
+                full_name = str(full_name).strip()
+                if not full_name:
+                    return JsonResponse({"error": "Full name cannot be empty"}, status=400)
+                donation.full_name = full_name
+                has_updates = True
 
-        if phone is not None:
-            phone = str(phone).strip()
-            if not phone:
-                return JsonResponse({"error": "Phone cannot be empty"}, status=400)
-            donation.phone = phone
-            has_updates = True
+            if phone is not None:
+                phone = str(phone).strip()
+                if not phone:
+                    return JsonResponse({"error": "Phone cannot be empty"}, status=400)
+                donation.phone = phone
+                has_updates = True
 
-        if number_of_trees is not None:
-            trees = _to_int(number_of_trees)
-            if trees <= 0:
-                return JsonResponse(
-                    {"error": "Number of trees must be greater than 0"},
-                    status=400,
-                )
-            donation.number_of_trees = trees
-            if donation.payment_status != "paid":
-                donation.amount_paise = trees * settings.TREE_PRICE_INR * 100
-            has_updates = True
+            if number_of_trees is not None:
+                trees = _to_int(number_of_trees)
+                if trees <= 0:
+                    return JsonResponse(
+                        {"error": "Number of trees must be greater than 0"},
+                        status=400,
+                    )
+                donation.number_of_trees = trees
+                if donation.payment_status != "paid":
+                    donation.amount_paise = trees * settings.TREE_PRICE_INR * 100
+                has_updates = True
 
-        if tree_species is not None:
-            donation.tree_species = str(tree_species).strip()
-            has_updates = True
+            if tree_species is not None:
+                donation.tree_species = str(tree_species).strip()
+                has_updates = True
 
-        if planting_location is not None:
-            planting_location = str(planting_location).strip()
-            if not planting_location:
-                return JsonResponse(
-                    {"error": "Planting location cannot be empty"},
-                    status=400,
-                )
-            donation.planting_location = planting_location
-            has_updates = True
+            if planting_location is not None:
+                planting_location = str(planting_location).strip()
+                if not planting_location:
+                    return JsonResponse(
+                        {"error": "Planting location cannot be empty"},
+                        status=400,
+                    )
+                donation.planting_location = planting_location
+                has_updates = True
 
-        if latitude is not None:
-            donation.latitude = _to_float(latitude)
-            has_updates = True
+            if latitude is not None:
+                donation.latitude = _to_float(latitude)
+                has_updates = True
 
-        if longitude is not None:
-            donation.longitude = _to_float(longitude)
-            has_updates = True
+            if longitude is not None:
+                donation.longitude = _to_float(longitude)
+                has_updates = True
 
-        if objective is not None:
-            objective = str(objective).strip()
-            if not objective:
-                return JsonResponse({"error": "Objective cannot be empty"}, status=400)
-            donation.objective = objective
-            has_updates = True
+            if objective is not None:
+                objective = str(objective).strip()
+                if not objective:
+                    return JsonResponse({"error": "Objective cannot be empty"}, status=400)
+                donation.objective = objective
+                has_updates = True
 
-        if dedication_name is not None:
-            donation.dedication_name = str(dedication_name).strip()
-            has_updates = True
+            if dedication_name is not None:
+                donation.dedication_name = str(dedication_name).strip()
+                has_updates = True
 
-        if notes is not None:
-            donation.notes = str(notes).strip()
-            has_updates = True
+            if notes is not None:
+                donation.notes = str(notes).strip()
+                has_updates = True
 
-        if not has_updates:
-            return JsonResponse({"error": "No fields provided to update"}, status=400)
+            if not has_updates:
+                return JsonResponse({"error": "No fields provided to update"}, status=400)
 
-        # Re-route paid order to pending review whenever user updates details.
-        if donation.payment_status == "paid":
-            donation.approval_status = "pending"
-            donation.approved_at = None
-            donation.planted_location = ""
-            donation.planted_latitude = None
-            donation.planted_longitude = None
-            donation.plantation_date = None
-            donation.trees_planted_count = None
-            donation.plantation_update = ""
-            donation.proof_image_1 = None
-            donation.proof_image_2 = None
-            donation.thank_you_note = ""
+            # Re-route paid order to pending review whenever user updates details.
+            if donation.payment_status == "paid":
+                donation.approval_status = "pending"
+                donation.approved_at = None
+                donation.planted_location = ""
+                donation.planted_latitude = None
+                donation.planted_longitude = None
+                donation.plantation_date = None
+                donation.trees_planted_count = None
+                donation.plantation_update = ""
+                donation.proof_image_1 = None
+                donation.proof_image_2 = None
+                donation.thank_you_note = ""
 
-        donation.save()
+            donation.save()
+            return JsonResponse(
+                {
+                    "message": "Order updated successfully",
+                    "order": _serialize_donation(donation),
+                }
+            )
+
+        if request.method == "DELETE":
+            donation.is_user_deleted = True
+            donation.user_deleted_at = timezone.now()
+            donation.save(update_fields=["is_user_deleted", "user_deleted_at"])
+            return JsonResponse({"message": "Order deleted successfully"})
+
+        return JsonResponse({"error": "Invalid request"}, status=400)
+    except (OperationalError, ProgrammingError):
+        logger.exception("Order detail query failed. Database may be missing migrations.")
         return JsonResponse(
             {
-                "message": "Order updated successfully",
-                "order": _serialize_donation(donation),
-            }
+                "error": (
+                    "Orders are not ready in database. "
+                    "Run migrations and restart backend."
+                )
+            },
+            status=503,
         )
-
-    if request.method == "DELETE":
-        donation.is_user_deleted = True
-        donation.user_deleted_at = timezone.now()
-        donation.save(update_fields=["is_user_deleted", "user_deleted_at"])
-        return JsonResponse({"message": "Order deleted successfully"})
-
-    return JsonResponse({"error": "Invalid request"}, status=400)
 
 
 @csrf_exempt

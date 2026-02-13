@@ -96,6 +96,7 @@ export default function Dashboard({ user }) {
   const [supportNotice, setSupportNotice] = useState("");
   const [reviews, setReviews] = useState([]);
   const [reviewSummary, setReviewSummary] = useState(DEFAULT_REVIEW_SUMMARY);
+  const [currentUserReview, setCurrentUserReview] = useState(null);
   const [reviewForm, setReviewForm] = useState({
     rating: 5,
     review_text: "",
@@ -151,7 +152,7 @@ export default function Dashboard({ user }) {
       const response = await fetch(
         `${TREES_API_BASE}/orders/?email=${encodeURIComponent(user.email)}`,
       );
-      const data = await response.json();
+      const data = await parseApiJson(response, "Unable to load orders");
       if (!response.ok) {
         throw new Error(data.error || "Unable to load orders");
       }
@@ -201,6 +202,7 @@ export default function Dashboard({ user }) {
       setReviewLoading(true);
       setReviewError("");
       try {
+        setCurrentUserReview(null);
         const query = user?.email
           ? `?email=${encodeURIComponent(user.email)}`
           : "";
@@ -213,11 +215,17 @@ export default function Dashboard({ user }) {
 
         setReviews(data.reviews || []);
         setReviewSummary(data.summary || DEFAULT_REVIEW_SUMMARY);
+        setCurrentUserReview(data.current_user_review || null);
 
         if (data.current_user_review) {
           setReviewForm({
             rating: data.current_user_review.rating || 5,
             review_text: data.current_user_review.review_text || "",
+          });
+        } else {
+          setReviewForm({
+            rating: 5,
+            review_text: "",
           });
         }
       } catch (err) {
@@ -294,7 +302,7 @@ export default function Dashboard({ user }) {
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const data = await parseApiJson(response, "Unable to update order");
       if (!response.ok) {
         throw new Error(data.error || "Unable to update order");
       }
@@ -322,7 +330,7 @@ export default function Dashboard({ user }) {
         `${TREES_API_BASE}/orders/${orderId}/?email=${encodeURIComponent(user.email)}`,
         { method: "DELETE" },
       );
-      const data = await response.json();
+      const data = await parseApiJson(response, "Unable to delete order");
       if (!response.ok) {
         throw new Error(data.error || "Unable to delete order");
       }
@@ -450,6 +458,13 @@ export default function Dashboard({ user }) {
       if (fetchResponse.ok) {
         setReviews(fetchData.reviews || []);
         setReviewSummary(fetchData.summary || DEFAULT_REVIEW_SUMMARY);
+        setCurrentUserReview(fetchData.current_user_review || null);
+        if (fetchData.current_user_review) {
+          setReviewForm({
+            rating: fetchData.current_user_review.rating || 5,
+            review_text: fetchData.current_user_review.review_text || "",
+          });
+        }
       }
     } catch (err) {
       setReviewError(err.message);
@@ -1059,6 +1074,28 @@ export default function Dashboard({ user }) {
             </form>
 
             <div className="space-y-3">
+              {currentUserReview && (
+                <div className="border border-emerald-200 rounded-xl p-4 bg-emerald-50">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                    Your Latest Review
+                  </p>
+                  <div className="mt-2 flex items-center gap-1">
+                    {renderStars(currentUserReview.rating, 14)}
+                    <span className="text-sm font-semibold text-emerald-800 ml-2">
+                      {currentUserReview.rating}/5
+                    </span>
+                  </div>
+                  <p className="text-sm text-emerald-900 mt-2">
+                    {currentUserReview.review_text || "No written review"}
+                  </p>
+                  <p className="text-xs text-emerald-700 mt-2">
+                    {formatDateTime(
+                      currentUserReview.updated_at || currentUserReview.created_at,
+                    )}
+                  </p>
+                </div>
+              )}
+
               {reviewLoading ? (
                 <p className="text-gray-600">Loading reviews...</p>
               ) : reviews.length === 0 ? (
