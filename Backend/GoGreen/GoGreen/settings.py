@@ -66,7 +66,7 @@ def _csv_to_list(value):
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-change-me")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = _as_bool(os.getenv("DEBUG"), default=False)
+DEBUG = _as_bool(os.getenv("DEBUG"), default=True)
 
 ALLOWED_HOSTS = _csv_to_list(os.getenv("ALLOWED_HOSTS"))
 if DEBUG and not ALLOWED_HOSTS:
