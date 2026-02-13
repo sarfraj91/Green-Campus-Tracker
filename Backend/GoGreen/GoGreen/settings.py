@@ -70,7 +70,7 @@ DEBUG = _as_bool(os.getenv("DEBUG"), default=True)
 
 ALLOWED_HOSTS = _csv_to_list(os.getenv("ALLOWED_HOSTS"))
 if DEBUG and not ALLOWED_HOSTS:
-    ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+     ALLOWED_HOSTS = ["*"]
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
 CORS_ALLOWED_ORIGINS = _csv_to_list(os.getenv("CORS_ALLOWED_ORIGINS"))
